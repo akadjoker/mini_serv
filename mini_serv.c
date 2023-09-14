@@ -111,13 +111,13 @@ int main()
 	
 	if ((bind(server, (const struct sockaddr *)&servaddr, sizeof(servaddr))) != 0) 
 	{ 
-		printf("socket bind failed...\n"); 
+		
 		panic(); 
 	} 
 	
 	if (listen(server, 10) != 0) 
 	{
-		printf("cannot listen\n"); 
+
 		panic();
 	}
 
@@ -224,9 +224,5 @@ int main()
 
 
 	close(server);
-	printf("end\n");
-
-
-
 	return 0;
 }
