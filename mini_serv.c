@@ -192,8 +192,9 @@ int main()
 							    char msg[128];
 								sprintf(msg,"server: client %d just left\n",clients[i].id);
 								send_str(clients,msg,clients[i].socket);
-								close(clients[i].socket);
+							
 								FD_CLR(clients[i].socket,&read_fd);
+								close(clients[i].socket);
 								clients[i].socket=0;
 								clients[i].id=-1;
 						} else
