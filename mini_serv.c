@@ -18,6 +18,84 @@ typedef struct
 		char *msg;
 }Client;
 
+typedef struct 
+{
+	Client **data;
+	int count;
+	int size;
+}Array;
+
+
+
+void init_array(Array *array, int size)
+{
+	array->data = (Client**) malloc(size * sizeof(Client*));
+	array->size=size;
+	array->count=0;
+}
+
+void free_array(Array *array)
+{
+	for (int i=0;i<array->count;i++)
+	{
+		if (array->data[i]->msg!=NULL)
+		{
+			free(array->data[i]->msg);
+			array->data[i]->msg=NULL;
+		}
+		free(array->data[i]);
+		
+	}
+	free(array->data);
+}
+
+Client* array_add(Array *a, int id,int socket)
+{
+	if (a->count==a->size)
+	{
+		int  newSize = a->size *2;
+		a->size = newSize;
+		Client **array =(Client**) realloc(a->data, newSize *  sizeof(Client*));
+		a->data=array;
+	}
+	Client* client;
+	client=(Client *)malloc(sizeof(Client));
+	client->id=id;
+	client->socket=socket;
+	client->msg = NULL;
+	a->data[a->count]=client;
+	a->count++;
+	return client;
+}
+
+int array_get_index(Array* a,int id)
+{
+
+	for (int i=0;i<a->count;i++)
+	{
+		if (a->data[i]->id==id)
+			return i;
+	}
+	return -1;
+}
+
+void array_remove(Array *a,int id)
+{
+	int index = array_get_index(a, id);
+	if (index==-1)
+	{
+		return;
+	}
+	free(a->data[index]->msg);
+	free(a->data[index]);
+	for (int i=index;i<a->count-1;i++)
+	{
+		a->data[i]=a->data[i+1];
+	}
+	a->count--;
+}
+
+
 int extract_message(char **buf, char **msg)
 {
 	char	*newbuf;
@@ -77,14 +155,14 @@ void panic()
 	exit(1);
 }
 
-void send_str(Client *clients,const char* msg,int discard)
+void send_str(Array *array,const char* msg,int discard)
 {
-	for (int i=0;i<MAX_CLIENT;i++)
+	for (int i=0;i<array->count;i++)
 	{
-		if (clients[i].socket>0)
+		if (array->data[i]->socket>0)
 		{
-			if (clients[i].socket!=discard)
-				send(clients[i].socket,msg,strlen(msg),0);
+			if (array->data[i]->socket!=discard)
+				send(array->data[i]->socket,msg,strlen(msg),0);
 		}
 	}
 }
@@ -124,14 +202,8 @@ int main()
  	fd_set read_fd;
 	FD_ZERO(&read_fd);
 
-	Client clients[MAX_CLIENT+1];
-	bzero(&clients,MAX_CLIENT * sizeof(Client));
-	for (int i=0;i<MAX_CLIENT;i++)
-	{
-		clients[i].id=-1;
-		clients[i].socket=0;
-		clients[i].msg=NULL;
-	}
+	Array array;
+	init_array(&array,100);
 
 	int max_fd =server;
 	int client_id=0;
@@ -142,12 +214,12 @@ int main()
 	{
 		FD_SET(server, &read_fd);
 
-		for (int i=0;i<MAX_CLIENT;i++)
+		for (int i=0;i<array.count;i++)
 		{
-			if (clients[i].socket>0)
+			if (array.data[i]->socket>0)
 			{
-					FD_SET(clients[i].socket, &read_fd);
-					max_fd= (clients[i].socket>max_fd)?clients[i].socket:max_fd;
+					FD_SET(array.data[i]->socket, &read_fd);
+					max_fd= (array.data[i]->socket>max_fd)?array.data[i]->socket:max_fd;
 			}
 		}
 
@@ -158,62 +230,54 @@ int main()
 
 		if (FD_ISSET(server,&read_fd))
 		{
-			for (int i=0;i<MAX_CLIENT;i++)
-			{
-				if (clients[i].socket==0)
-				{
-						clients[i].socket = accept(server,NULL,NULL);
-						if (clients[i].socket ==-1)
+						int new_socket = accept(server,NULL,NULL);
+						if (new_socket ==-1)
 						{
 							panic();
 						}
-						clients[i].id=client_id;
-						clients[i].msg=NULL;
+						Client* client = array_add(&array,client_id,new_socket);
+						if (client==NULL)
+							panic();
 						client_id++;
 						char msg[128];
-						sprintf(msg,"server: client %d just arrived\n",clients[i].id);
-						send_str(clients,msg,clients[i].socket);
-						break;
-				}
-			}
-
+						sprintf(msg,"server: client %d just arrived\n",client->id);
+						send_str(&array,msg,client->socket);
+					
 		}
 
-			for (int i=0;i<MAX_CLIENT;i++)
+			for (int i=0;i<array.count;i++)
 			{
 					
-					if (FD_ISSET(clients[i].socket,&read_fd) && clients[i].socket>0)
+					if (FD_ISSET(array.data[i]->socket,&read_fd) && array.data[i]->socket>0)
 					{
 						
-						int total = recv(clients[i].socket,BUFFER,MAX_BUFFER,0);
+						int total = recv(array.data[i]->socket,BUFFER,MAX_BUFFER,0);
 
 						if (total<=0)//remove
 						{
 							    char msg[128];
-								sprintf(msg,"server: client %d just left\n",clients[i].id);
-								send_str(clients,msg,clients[i].socket);
-							
-								FD_CLR(clients[i].socket,&read_fd);
-								close(clients[i].socket);
-								clients[i].socket=0;
-								clients[i].id=-1;
+								sprintf(msg,"server: client %d just left\n",array.data[i]->id);
+								send_str(&array,msg,array.data[i]->socket);
+								FD_CLR(array.data[i]->socket,&read_fd);
+								close(array.data[i]->socket);
+								array_remove(&array,array.data[i]->id);
 						} else
 						{
 							BUFFER[total]='\0';
 							char *msg=NULL;
-							clients[i].msg = str_join(clients[i].msg, BUFFER);
-							while(extract_message(&clients[i].msg, &msg)==1)
+							array.data[i]->msg = str_join(array.data[i]->msg, BUFFER);
+							while(extract_message(&array.data[i]->msg, &msg)==1)
 							{
 								char a[128];
-								sprintf(a,"client %d: ",clients[i].id);
-								send_str(clients,a,clients[i].socket);
-								send_str(clients,msg,clients[i].socket);
+								sprintf(a,"client %d: ",array.data[i]->id);
+								send_str(&array,a,array.data[i]->socket);
+								send_str(&array,msg,array.data[i]->socket);
 								free(msg);
 								msg=NULL;
-								if (clients[i].msg!=NULL)
+								if (array.data[i]->msg!=NULL)
 								{
-									free(clients[i].msg);
-									clients[i].msg=NULL;
+									free(array.data[i]->msg);
+									array.data[i]->msg=NULL;
 								}
 							}
 						}
@@ -222,7 +286,7 @@ int main()
 	}
 
 
-
+	free_array(&array);
 	close(server);
 	return 0;
 }
