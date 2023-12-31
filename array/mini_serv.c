@@ -183,7 +183,7 @@ servaddr.sin_addr.s_addr = htonl(2130706433); //127.0.0.1
 servaddr.sin_port = htons(atoi(argv[1])); 
 //servaddr.sin_port = htons(1478); 
 
-
+//no exmae o codigo recebido noa compila com as flagss -wall -wextra -Werror atençaoa isso
 if ((bind(server, (const struct sockaddr *)&servaddr, sizeof(servaddr))) != 0)
     erro_msg("Fatal error\n");
 if (listen(server, 10) != 0)
@@ -206,7 +206,7 @@ FD_SET(server,&fd_list);
 while(1)
 {
 
-
+		//obtemos o mair numero da lista dos socks 
 	int max_fd=server;
 	for (int i=0;i<=clients_count;i++)
 	{
@@ -215,9 +215,10 @@ while(1)
 
 	}
 
-    printf("process Max fd: %d - total: %d  Mids: %d \n",max_fd,clients_count,clients_ids);
+ //   printf("process Max fd: %d - total: %d  Mids: %d \n",max_fd,clients_count,clients_ids);
 
 	master = fd_list;
+	// o select modifica o fd_list ATENÇAO, é smepre max + 1
 	if (select(max_fd+1,&master,NULL,NULL,NULL)<=0)
 	{
 		erro_msg("select Fatal error\n");
@@ -237,7 +238,7 @@ while(1)
                         }
 
 						int id = create_client(socket);
-						FD_SET(socket,&fd_list);
+						FD_SET(socket,&fd_list);//adicionamos o novo socket a lista de sockets
 						char status[80]={'\0'};
 						sprintf(status,"server: client %d just arrived\n",id);
 						send_msg(status,socket);
@@ -245,12 +246,12 @@ while(1)
 
 			} else
 			{
-				char buffer[4096]={'\0'};
+				char buffer[4096]={'\0'};//buffer para receber a mensagem do cliente
 				int bytes = recv(fd,buffer,sizeof(buffer)-1,MSG_DONTWAIT);
 				if (bytes<=0)
 				{
 					int id =remove_client(fd);
-					FD_CLR(fd,&fd_list);
+					FD_CLR(fd,&fd_list);//removemos o socket da lista de sockets
 					close(fd);
 					char status[80]={'\0'};
 					sprintf(status,"server: client %d just left\n",id);
@@ -258,7 +259,7 @@ while(1)
 
 				} else
 				{
-					buffer[bytes]='\0';
+					buffer[bytes]='\0';//terminamos a string
 					char *text	=NULL;
 					clients[fd].msg = str_join(clients[fd].msg,buffer);
 					while(extract_message(&clients[fd].msg,&text))
